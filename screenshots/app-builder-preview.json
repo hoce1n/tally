@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Tally",
+      "hasCanvas": false,
+      "bodyTextLen": 225,
+      "bodyTextHash": "5062390b9a5edb7d08ce54a061e8d3ba211f6295f601386ff740b6a5fcc2d285",
+      "bodyTextPrefix": "Tally Ask. Vote. Watch it move. New poll LIVE POLL Where should ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Tally",
+      "hasCanvas": false,
+      "bodyTextLen": 225,
+      "bodyTextHash": "5062390b9a5edb7d08ce54a061e8d3ba211f6295f601386ff740b6a5fcc2d285",
+      "bodyTextPrefix": "Tally Ask. Vote. Watch it move. New poll LIVE POLL Where should ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
