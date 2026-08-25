@@ -1,212 +1,175 @@
-import { Check, PenLine, RotateCcw } from "lucide-react";
-import { useEffect } from "react";
+import { Check, Copy, LoaderCircle, Radio, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  percentOf,
-  totalVotes,
-  usePollStore,
-  type PollOption,
-} from "@/lib/poll-store";
+import { captureHostSecretFromFragment, useRoomStore } from "@/lib/rooms/room-store";
 import { cn } from "@/lib/utils";
 
-export function PollRoom() {
-  const question = usePollStore((s) => s.question);
-  const options = usePollStore((s) => s.options);
-  const votedId = usePollStore((s) => s.votedId);
-  const live = usePollStore((s) => s.live);
-  const vote = usePollStore((s) => s.vote);
-  const resetVotes = usePollStore((s) => s.resetVotes);
-  const openCreate = usePollStore((s) => s.openCreate);
-  const setLive = usePollStore((s) => s.setLive);
-  const tickLiveVote = usePollStore((s) => s.tickLiveVote);
-
-  const revealed = votedId !== null;
-  const total = totalVotes(options);
-  const leadVotes = Math.max(0, ...options.map((o) => o.votes));
-  const leaders = options.filter((o) => o.votes === leadVotes && leadVotes > 0);
-  const uniqueLeadId = leaders.length === 1 ? leaders[0]?.id : null;
+export function PollRoom({ roomId }: { roomId: string }) {
+  const room = useRoomStore((state) => state.room);
+  const lifecycle = useRoomStore((state) => state.lifecycle);
+  const network = useRoomStore((state) => state.network);
+  const error = useRoomStore((state) => state.error);
+  const isSubmittingVote = useRoomStore((state) => state.isSubmittingVote);
+  const joinRoom = useRoomStore((state) => state.joinRoom);
+  const startVoting = useRoomStore((state) => state.startVoting);
+  const submitVote = useRoomStore((state) => state.submitVote);
+  const disconnectRealtime = useRoomStore((state) => state.disconnectRealtime);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!live || !revealed) return;
-    let timer: number;
-    const loop = () => {
-      const wait = 1200 + Math.random() * 1400;
-      timer = window.setTimeout(() => {
-        tickLiveVote();
-        loop();
-      }, wait);
-    };
-    loop();
-    return () => window.clearTimeout(timer);
-  }, [live, revealed, tickLiveVote]);
+    captureHostSecretFromFragment(roomId);
+    void joinRoom(roomId);
+    return () => disconnectRealtime();
+  }, [disconnectRealtime, joinRoom, roomId]);
+
+  async function copyRoomLink() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/r/${roomId}`);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  if (!room && lifecycle === "loading-room") {
+    return (
+      <div className="flex min-h-72 flex-col items-center justify-center gap-3 text-center">
+        <LoaderCircle className="size-5 animate-spin text-primary" aria-hidden />
+        <p className="text-sm text-muted">Opening the room…</p>
+      </div>
+    );
+  }
+
+  if (!room) {
+    return (
+      <div className="flex min-h-72 flex-col items-center justify-center gap-3 text-center">
+        <p className="font-display text-2xl text-fg">This room is unavailable.</p>
+        <p className="max-w-sm text-sm leading-relaxed text-muted">
+          {error ?? "It may have ended or expired."}
+        </p>
+        <Button type="button" variant="outline" onClick={() => window.location.assign("/")}>
+          Create a room
+        </Button>
+      </div>
+    );
+  }
+
+  const isHost = room.viewer?.role === "host";
+  const hasVoted = room.viewer?.hasVoted ?? false;
+  const waiting = room.status === "gathering";
+  const voting = room.status === "voting";
 
   return (
     <div className="flex flex-col gap-6">
       <header className="stagger-in flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium tracking-wide text-muted uppercase">
-            Live poll
+            {waiting ? "Gathering the room" : voting ? "Voting is open" : "Room ended"}
           </p>
-          {revealed ? (
-            <button
-              type="button"
-              onClick={() => setLive(!live)}
-              aria-pressed={live}
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <span
               className={cn(
-                "pressable inline-flex h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-[color,background-color,border-color] duration-quick ease-smooth-out",
-                live
-                  ? "border-primary/30 bg-primary/10 text-primary"
-                  : "border-border bg-surface text-muted hover:text-fg",
+                "size-1.5 rounded-full",
+                network === "connected" ? "bg-primary" : "bg-subtle",
               )}
-            >
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  live ? "live-dot bg-primary" : "bg-subtle",
-                )}
-                aria-hidden
-              />
-              {live ? "Live" : "Paused"}
-            </button>
-          ) : null}
+              aria-hidden
+            />
+            {network === "connected"
+              ? "Connected"
+              : network === "offline"
+                ? "Live updates unavailable"
+                : network === "reconnecting"
+                  ? "Reconnecting"
+                  : "Connecting"}
+          </span>
         </div>
-        <h2 className="font-display text-3xl leading-tight font-medium tracking-tight text-fg sm:text-4xl">
-          {question}
-        </h2>
-        <p
-          className="text-sm text-muted tabular-nums"
-          aria-live="polite"
-        >
-          {revealed
-            ? `${total} ${total === 1 ? "vote" : "votes"}`
-            : "One vote each. Results fill in after you choose."}
+        <h1 className="font-display text-3xl leading-tight font-medium tracking-tight text-fg sm:text-4xl">
+          {room.question}
+        </h1>
+        <p className="text-sm leading-relaxed text-muted" aria-live="polite">
+          {waiting
+            ? `${room.joinedCount} ${room.joinedCount === 1 ? "person is" : "people are"} here. ${isHost ? "Share the room, then open voting." : "Waiting for the host to open voting."}`
+            : voting
+              ? hasVoted
+                ? "Your vote is in. Results will appear when the host reveals the room."
+                : "Choose once. The room will reveal together."
+              : "This room is no longer accepting votes."}
         </p>
       </header>
 
-      <ul className="stagger-in flex flex-col gap-3" role="list">
-        {options.map((option) => (
-          <li key={option.id}>
-            <OptionCard
-              option={option}
-              total={total}
-              revealed={revealed}
-              selected={votedId === option.id}
-              leading={uniqueLeadId === option.id && revealed}
-              disabled={revealed}
-              onVote={() => vote(option.id)}
-            />
-          </li>
-        ))}
-      </ul>
+      {waiting ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface-2 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-fg">
+            <Users className="size-4 text-primary" />
+            {room.joinedCount} in the room
+          </div>
+          <p className="text-sm leading-relaxed text-muted">
+            Invite the people making this decision. No account is needed to join.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => void copyRoomLink()}
+            >
+              <Copy />
+              {copied ? "Link copied" : "Copy room link"}
+            </Button>
+            {isHost ? (
+              <Button type="button" className="flex-1" onClick={() => void startVoting()}>
+                <Radio />
+                Start voting
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button
-          type="button"
-          variant="secondary"
-          className="flex-1"
-          onClick={resetVotes}
-        >
-          <RotateCcw />
-          Reset votes
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="flex-1"
-          onClick={openCreate}
-        >
-          <PenLine />
-          New poll
-        </Button>
-      </div>
+      {voting ? (
+        <ul className="stagger-in flex flex-col gap-3" role="list">
+          {room.options.map((option) => {
+            const selected = room.viewer?.votedOptionId === option.id;
+            return (
+              <li key={option.id}>
+                <button
+                  type="button"
+                  onClick={() => void submitVote(option.id)}
+                  disabled={hasVoted || isSubmittingVote}
+                  aria-pressed={selected}
+                  className={cn(
+                    "pressable flex w-full items-center justify-between gap-3 rounded-lg border bg-surface p-4 text-left transition-[border-color,background-color,opacity,box-shadow] duration-fast ease-smooth-out",
+                    "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
+                    selected
+                      ? "border-primary bg-surface-2"
+                      : "border-border hover:border-primary/35 hover:bg-surface-2",
+                    (hasVoted || isSubmittingVote) && !selected && "cursor-not-allowed opacity-65",
+                  )}
+                >
+                  <span className="min-w-0 text-base font-medium text-fg">{option.label}</span>
+                  {selected ? (
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-fg">
+                      <Check className="size-3" strokeWidth={3} />
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      {error ? (
+        <p className="text-sm text-fg" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <footer className="border-t border-border pt-4 text-xs text-muted">
+        {room.submittedCount} {room.submittedCount === 1 ? "vote" : "votes"} submitted · one vote
+        per browser session
+      </footer>
     </div>
-  );
-}
-
-function OptionCard({
-  option,
-  total,
-  revealed,
-  selected,
-  leading,
-  disabled,
-  onVote,
-}: {
-  option: PollOption;
-  total: number;
-  revealed: boolean;
-  selected: boolean;
-  leading: boolean;
-  disabled: boolean;
-  onVote: () => void;
-}) {
-  const pct = percentOf(option.votes, total);
-
-  return (
-    <button
-      type="button"
-      onClick={onVote}
-      disabled={disabled}
-      aria-pressed={selected}
-      aria-label={
-        revealed
-          ? `${option.label}, ${pct} percent, ${option.votes} votes`
-          : option.label
-      }
-      className={cn(
-        "pressable group flex w-full flex-col gap-3 rounded-lg border bg-surface p-4 text-left transition-[border-color,background-color,opacity,box-shadow] duration-fast ease-smooth-out",
-        "focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
-        selected
-          ? "border-primary bg-surface-2"
-          : "border-border hover:border-primary/35 hover:bg-surface-2",
-        disabled && !selected && "cursor-not-allowed opacity-70",
-        disabled && selected && "cursor-default",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2 text-base font-medium text-fg">
-          {selected ? (
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-fg">
-              <Check className="size-3" strokeWidth={3} />
-            </span>
-          ) : null}
-          <span className="min-w-0">{option.label}</span>
-        </span>
-        <span
-          className={cn(
-            "shrink-0 text-sm font-medium tabular-nums transition-opacity duration-fast ease-smooth-out",
-            revealed ? "opacity-100 text-fg" : "opacity-0",
-          )}
-        >
-          {pct}%
-        </span>
-      </div>
-
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-border"
-        aria-hidden
-      >
-        <div
-          className={cn(
-            "bar-fill h-full w-full rounded-full",
-            selected || leading ? "bg-primary" : "bg-lead/80",
-          )}
-          style={{ ["--bar-pct" as string]: revealed ? pct / 100 : 0 }}
-        />
-      </div>
-
-      <div
-        className={cn(
-          "flex items-center justify-between text-xs text-muted tabular-nums transition-opacity duration-fast ease-smooth-out",
-          revealed ? "opacity-100" : "hidden",
-        )}
-      >
-        <span>
-          {option.votes} {option.votes === 1 ? "vote" : "votes"}
-        </span>
-        {leading ? <span className="text-primary">Leading</span> : null}
-        {selected && !leading ? <span className="text-primary">Your vote</span> : null}
-      </div>
-    </button>
   );
 }
